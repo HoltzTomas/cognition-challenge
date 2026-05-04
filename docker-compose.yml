@@ -16,4 +16,4 @@ services:
       - .env
     environment:
       POLL_BASE_URL: http://app:3000
-      POLL_INTERVAL_SECONDS: 60
+      POLL_INTERVAL_SECONDS: 10

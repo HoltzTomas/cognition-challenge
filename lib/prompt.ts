@@ -75,6 +75,5 @@ export function buildDevinPrompt(event: GitHubIssueEvent) {
     "- tests_run: list of commands run",
     "- pr_url: PR URL if opened",
     "- blocker: blocker text if not completed",
-    "- acu_consumed: ACUs used if available",
   ].join("\n");
 }

@@ -4,10 +4,28 @@ import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 
 describe("Devin polling status mapping", () => {
-  test("treats structured succeeded output with a PR URL and waiting_for_user as review_required", async () => {
+  test("keeps structured blocked output active while Devin is still working", async () => {
+    const { deriveStatus } = await import("@/lib/tasks");
+
+    expect(
+      deriveStatus({
+        session_id: "devin-working",
+        status: "running",
+        status_detail: "working",
+        structured_output: {
+          status: "blocked",
+          summary: "Still investigating.",
+          tests_run: [],
+        },
+        url: "https://app.devin.ai/sessions/devin-working",
+      }),
+    ).toBe("working");
+  });
+
+  test("treats a PR URL as completed even when Devin detail still says working", async () => {
     process.env.DEVIN_DRY_RUN = "true";
     process.env.GITHUB_DRY_RUN = "true";
-    process.env.DRY_RUN_STATUS_DETAIL = "waiting_for_user";
+    process.env.DRY_RUN_STATUS_DETAIL = "working";
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "devin-status-"));
     process.env.SQLITE_PATH = path.join(tempDir, "tasks.db");
     vi.resetModules();
@@ -32,7 +50,8 @@ describe("Devin polling status mapping", () => {
 
     const result = await pollActiveDevinSessions();
     expect(result.polled).toBe(1);
-    expect(result.tasks[0]?.status).toBe("review_required");
+    expect(result.tasks[0]?.status).toBe("completed");
+    expect(result.tasks[0]?.statusDetail).toBe("pr_opened");
     expect(result.tasks[0]?.prUrl).toContain("github.com/example/superset/pull/1");
 
     resetDbForTests();

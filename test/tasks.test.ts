@@ -36,6 +36,11 @@ describe("tasks orchestration", () => {
     expect(first.accepted).toBe(true);
     expect(db.listTasks()).toHaveLength(1);
     expect(db.listTasks()[0].devinSessionUrl).toContain("app.devin.ai");
+    expect(db.listTasks()[0].status).toBe("session_created");
+    expect(db.listTasks()[0].triggerActor).toBe("your-github-user");
+    expect(db.listTasks()[0].triggerAction).toBe("opened");
+    expect(db.listTasks()[0].intakeDecision).toBe("accepted");
+    expect(db.listTasks()[0].suggestedTestCommand).toContain("parseCookie.test.ts");
 
     const duplicate = await tasks.simulateIssueEvent();
     expect(duplicate.accepted).toBe(false);
@@ -46,8 +51,53 @@ describe("tasks orchestration", () => {
     expect(polled.polled).toBe(1);
 
     const [task] = db.listTasks();
-    expect(task.status).toBe("finished");
+    expect(task.status).toBe("completed");
+    expect(task.statusDetail).toBe("pr_opened");
     expect(task.prUrl).toContain("github.com/example/superset/pull/1");
     expect(task.durationSeconds).toEqual(expect.any(Number));
+  });
+
+  test("records rejected triggers and promotes them when an authorized maintainer retries", async () => {
+    process.env.AUTHORIZED_GITHUB_LOGINS = "alice";
+    const tasks = await import("@/lib/tasks");
+    const db = await import("@/lib/db");
+
+    const payload = {
+      action: "labeled",
+      repository: {
+        full_name: "your-org/superset",
+        html_url: "https://github.com/your-org/superset",
+      },
+      issue: {
+        author_association: "NONE",
+        number: 777,
+        title: "Bounded issue",
+        body: "## Suggested test command\n`yarn test focused.test.ts`",
+        html_url: "https://github.com/your-org/superset/issues/777",
+        labels: [{ name: "devin-remediate" }],
+      },
+      label: { name: "devin-remediate" },
+      sender: { login: "mallory" },
+    };
+
+    const rejected = await tasks.simulateIssueEvent(payload);
+    expect(rejected.accepted).toBe(false);
+    expect(rejected.authorized).toBe(false);
+    expect(db.listTasks()).toHaveLength(1);
+    expect(db.listTasks()[0].status).toBe("rejected");
+    expect(db.listTasks()[0].intakeDecision).toBe("rejected");
+    expect(db.listTasks()[0].suggestedTestCommand).toContain("focused.test.ts");
+
+    const promoted = await tasks.simulateIssueEvent({
+      ...payload,
+      sender: { login: "alice" },
+    });
+
+    expect(promoted.accepted).toBe(true);
+    expect(promoted.promoted).toBe(true);
+    expect(db.listTasks()).toHaveLength(1);
+    expect(db.listTasks()[0].status).toBe("session_created");
+    expect(db.listTasks()[0].intakeDecision).toBe("accepted");
+    expect(db.listTasks()[0].triggerActor).toBe("alice");
   });
 });

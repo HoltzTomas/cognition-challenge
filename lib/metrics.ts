@@ -2,48 +2,34 @@ import { listTasks } from "@/lib/db";
 import type { Metrics, Task } from "@/lib/types";
 
 function isActive(task: Task) {
-  return ![
-    "finished",
-    "review_required",
-    "blocked",
-    "failed",
-    "error",
-    "suspended",
-    "exit",
-  ].includes(task.status);
+  return ["accepted", "session_created", "working"].includes(task.status);
 }
 
 function isCompleted(task: Task) {
-  return (
-    task.status === "finished" ||
-    task.status === "review_required" ||
-    task.status === "exit"
-  );
+  return task.status === "completed";
 }
 
 function isBlocked(task: Task) {
-  return task.status === "blocked" || task.status === "suspended";
+  return task.status === "blocked";
 }
 
 function isFailed(task: Task) {
-  return task.status === "failed" || task.status === "error";
+  return task.status === "failed";
 }
 
 export function calculateMetrics(tasks: Task[]): Metrics {
-  const completed = tasks.filter(isCompleted);
-  const blocked = tasks.filter(isBlocked);
-  const failed = tasks.filter(isFailed);
+  const acceptedTasks = tasks.filter(task => task.intakeDecision === "accepted");
+  const completed = acceptedTasks.filter(isCompleted);
+  const blocked = acceptedTasks.filter(isBlocked);
+  const failed = acceptedTasks.filter(isFailed);
   const terminalCount = completed.length + blocked.length + failed.length;
-  const durations = tasks
+  const durations = acceptedTasks
     .map(task => task.durationSeconds)
-    .filter((value): value is number => typeof value === "number");
-  const acus = tasks
-    .map(task => task.acusConsumed)
     .filter((value): value is number => typeof value === "number");
 
   return {
-    total: tasks.length,
-    active: tasks.filter(isActive).length,
+    total: acceptedTasks.length,
+    active: acceptedTasks.filter(isActive).length,
     completed: completed.length,
     blocked: blocked.length,
     failed: failed.length,
@@ -52,10 +38,6 @@ export function calculateMetrics(tasks: Task[]): Metrics {
       durations.length === 0
         ? null
         : Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length),
-    totalAcusConsumed:
-      acus.length === 0
-        ? null
-        : Number(acus.reduce((sum, value) => sum + value, 0).toFixed(2)),
   };
 }
 

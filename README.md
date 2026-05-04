@@ -1,15 +1,20 @@
-# Devin Remediation Queue
+# Superset Remediation Lane
 
-A full-stack Next.js App Router demo for Cognition's take-home challenge. It turns a GitHub issue labeled `devin-remediate` into a tracked Devin remediation session, comments progress back to GitHub, and shows operational status on a lightweight dashboard.
+A full-stack Next.js App Router demo for Cognition's take-home challenge. It adds a safe Devin-powered remediation lane for selected Apache Superset issues while maintainers continue working in GitHub with issues, labels, comments, PRs, and review.
 
 ## What It Demonstrates
 
 - GitHub `issues` webhook ingestion with HMAC verification.
-- Idempotent task creation keyed by `repo + issue_number`.
+- Idempotent task creation keyed by `repo + issue_number`, including rejected intake records.
+- Trigger actor, authorization decision, and suggested test command capture.
 - Devin API v3 session creation and polling.
 - SQLite-backed task state.
 - GitHub issue comments for accepted, session-created, and final PR/blocker updates.
-- Dashboard metrics that answer: "How do I know this is working?"
+- Dashboard metrics and task lifecycle visibility for maintainers and engineering leads.
+
+## Project Diagram
+
+See [docs/project-flow.md](docs/project-flow.md) for architecture, lifecycle, and status diagrams.
 
 ## Environment Variables
 
@@ -19,7 +24,6 @@ Copy `.env.example` to `.env` and fill in real values for a live run.
 | --- | --- | --- |
 | `DEVIN_API_KEY` | Live run | Devin service user API key. |
 | `DEVIN_ORG_ID` | Live run | Devin organization ID, for `/v3/organizations/{org_id}/sessions`. |
-| `DEVIN_MAX_ACU_LIMIT` | Optional | ACU cap for each remediation session. Defaults to `5`. |
 | `DEVIN_DRY_RUN` | Optional | Set `true` to simulate Devin create/poll calls locally. |
 | `GITHUB_TOKEN` | Live comments | Token with permission to comment on fork issues. |
 | `GITHUB_WEBHOOK_SECRET` | Webhook | Secret configured in the GitHub webhook. |
@@ -28,7 +32,7 @@ Copy `.env.example` to `.env` and fill in real values for a live run.
 | `AUTHORIZED_GITHUB_LOGINS` | Optional | Comma-separated GitHub usernames allowed to trigger Devin. If unset, signed label events are trusted because labels require repo permissions. |
 | `GITHUB_DRY_RUN` | Optional | Set `true` to log comments instead of writing to GitHub. |
 | `APP_BASE_URL` | Yes | Public base URL used in GitHub comments. |
-| `CRON_SECRET` | Yes | Bearer token or query secret for polling. |
+| `CRON_SECRET` | Optional | Bearer token used by external pollers if you add auth around polling. The demo polling endpoint is open. |
 | `SQLITE_PATH` | Optional | Defaults to `./data/tasks.db`. |
 
 For a local no-credential demo, keep `DEVIN_DRY_RUN=true` and `GITHUB_DRY_RUN=true`.
@@ -43,6 +47,20 @@ The automation does not let any public issue author spend Devin capacity.
 - If `AUTHORIZED_GITHUB_LOGINS` is set, the GitHub event sender must be in that allowlist.
 - If `AUTHORIZED_GITHUB_LOGINS` is unset, `labeled` events are accepted because GitHub only lets users with repository permissions apply labels.
 - `opened` events with the label already present are accepted only from trusted GitHub author associations: `OWNER`, `MEMBER`, or `COLLABORATOR`.
+- Unauthorized remediation triggers are recorded as rejected intake records on the dashboard, but they do not count as failed Devin tasks.
+- If a previously rejected issue is later labeled by an authorized maintainer, the existing record is promoted instead of creating a duplicate Devin session.
+
+## Task Statuses
+
+The dashboard uses maintainer-facing statuses:
+
+- `accepted`: trigger authorized and task persisted.
+- `session_created`: Devin session created.
+- `working`: Devin is active.
+- `completed`: PR or successful outcome available.
+- `blocked`: Devin needs human input or could not safely continue.
+- `failed`: automation or API error.
+- `rejected`: trigger was not authorized; excluded from throughput metrics.
 
 ## Run Locally
 
@@ -82,8 +100,7 @@ curl -X POST http://localhost:3000/api/simulate \
 Then poll Devin:
 
 ```bash
-curl -X POST http://localhost:3000/api/cron/poll-devin \
-  -H "Authorization: Bearer replace-with-a-random-cron-secret"
+curl -X POST http://localhost:3000/api/cron/poll-devin
 ```
 
 In dry-run mode, polling immediately completes with a fake PR URL so the dashboard can show the full lifecycle.
@@ -135,16 +152,15 @@ Each issue body should include the problem, target file, acceptance criteria, su
 
 The dashboard at `/` shows:
 
-- issue title and URL
-- Devin session URL
-- current status and status detail
-- PR URL when available
-- blocker/error when available
-- start time and duration
-- ACUs consumed when available
-- aggregate active/completed/blocked/failed metrics
+- GitHub issue, repository, and issue number.
+- Trigger actor, trigger action, authorization reason, and accepted/rejected decision.
+- Current remediation status, normalized status detail, and whether human review is required.
+- GitHub issue, Devin session, and PR links when available.
+- Suggested test command, tests run, structured summary, and blocker/error details.
+- A compact lifecycle per task: issue trigger, accepted/rejected, session created, status updated, PR/blocker/failure, and final comment.
+- Aggregate accepted-task metrics: active, completed, blocked, failed, success rate, and average duration.
 
-This makes the automation legible to a VP of Engineering: they can see throughput, completion, failure modes, cost signals, and the concrete PR outcome.
+This makes the remediation lane legible to maintainers and engineering leads: every task is tied to a GitHub issue, every Devin session is tracked, every PR still goes through normal human review, and the dashboard exposes throughput, blockers, and reliability.
 
 ## API Routes
 
@@ -156,9 +172,9 @@ This makes the automation legible to a VP of Engineering: they can see throughpu
 
 ## Loom Demo Flow
 
-1. Explain the maintenance-remediation queue problem.
+1. Explain the safe remediation lane for selected Superset issues.
 2. Show a Superset fork issue labeled `devin-remediate`.
 3. Trigger the webhook or call `/api/simulate`.
-4. Show GitHub comments and the Devin session URL.
-5. Poll Devin and show the dashboard updating with PR or blocker state.
+4. Show concise GitHub comments and the Devin session URL.
+5. Poll Devin and show the dashboard updating with PR, blocker, tests, and lifecycle state.
 6. Close with real-customer extensions: scanner ingestion, Jira/Linear intake, approval gates, and richer org-level metrics.

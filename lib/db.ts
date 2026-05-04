@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { Task, TaskStatus, StructuredOutput } from "@/lib/types";
+import { normalizeTaskStatusDetail } from "@/lib/status-detail";
+import type { IntakeDecision, Task, TaskStatus, StructuredOutput } from "@/lib/types";
 
 type TaskRow = {
   id: number;
@@ -12,6 +13,11 @@ type TaskRow = {
   issue_title: string;
   issue_body: string | null;
   issue_url: string;
+  trigger_actor: string | null;
+  trigger_action: string | null;
+  authorization_reason: string | null;
+  intake_decision: string | null;
+  suggested_test_command: string | null;
   devin_session_id: string | null;
   devin_session_url: string | null;
   status: string;
@@ -24,7 +30,6 @@ type TaskRow = {
   updated_at: string;
   completed_at: string | null;
   duration_seconds: number | null;
-  acus_consumed: number | null;
   accepted_comment_posted_at: string | null;
   session_comment_posted_at: string | null;
   final_comment_posted_at: string | null;
@@ -37,6 +42,11 @@ type CreateTaskInput = {
   issueTitle: string;
   issueBody: string;
   issueUrl: string;
+  triggerActor?: string | null;
+  triggerAction?: string | null;
+  authorizationReason?: string | null;
+  intakeDecision?: IntakeDecision;
+  suggestedTestCommand?: string | null;
   rawEvent: unknown;
 };
 
@@ -45,6 +55,11 @@ type TaskUpdate = Partial<
     Task,
     | "devinSessionId"
     | "devinSessionUrl"
+    | "triggerActor"
+    | "triggerAction"
+    | "authorizationReason"
+    | "intakeDecision"
+    | "suggestedTestCommand"
     | "status"
     | "statusDetail"
     | "structuredOutput"
@@ -53,10 +68,10 @@ type TaskUpdate = Partial<
     | "error"
     | "completedAt"
     | "durationSeconds"
-    | "acusConsumed"
     | "acceptedCommentPostedAt"
     | "sessionCommentPostedAt"
     | "finalCommentPostedAt"
+    | "startedAt"
   >
 >;
 
@@ -81,6 +96,11 @@ function initDb(database: Database.Database) {
       issue_title TEXT NOT NULL,
       issue_body TEXT,
       issue_url TEXT NOT NULL,
+      trigger_actor TEXT,
+      trigger_action TEXT,
+      authorization_reason TEXT,
+      intake_decision TEXT NOT NULL DEFAULT 'accepted',
+      suggested_test_command TEXT,
       devin_session_id TEXT,
       devin_session_url TEXT,
       status TEXT NOT NULL,
@@ -93,7 +113,6 @@ function initDb(database: Database.Database) {
       updated_at TEXT NOT NULL,
       completed_at TEXT,
       duration_seconds INTEGER,
-      acus_consumed REAL,
       accepted_comment_posted_at TEXT,
       session_comment_posted_at TEXT,
       final_comment_posted_at TEXT,
@@ -103,6 +122,31 @@ function initDb(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_tasks_devin_session_id ON tasks(devin_session_id);
   `);
+  migrateDb(database);
+}
+
+function migrateDb(database: Database.Database) {
+  const columns = new Set(
+    (
+      database.prepare("PRAGMA table_info(tasks)").all() as Array<{
+        name: string;
+      }>
+    ).map(column => column.name),
+  );
+
+  const additions: Array<[string, string]> = [
+    ["trigger_actor", "TEXT"],
+    ["trigger_action", "TEXT"],
+    ["authorization_reason", "TEXT"],
+    ["intake_decision", "TEXT NOT NULL DEFAULT 'accepted'"],
+    ["suggested_test_command", "TEXT"],
+  ];
+
+  for (const [name, definition] of additions) {
+    if (!columns.has(name)) {
+      database.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${definition}`);
+    }
+  }
 }
 
 export function getDb() {
@@ -127,13 +171,33 @@ function taskKey(repoFullName: string, issueNumber: number) {
 function parseStructuredOutput(value: string | null): StructuredOutput | null {
   if (!value) return null;
   try {
-    return JSON.parse(value) as StructuredOutput;
+    const parsed = JSON.parse(value) as StructuredOutput & { acu_consumed?: unknown };
+    delete parsed.acu_consumed;
+    return parsed;
   } catch {
     return null;
   }
 }
 
+function normalizeStoredStatus(status: string): string {
+  if (["new", "claimed", "running", "resuming"].includes(status)) {
+    return "working";
+  }
+  if (status === "starting") return "accepted";
+  if (["finished", "review_required", "exit"].includes(status)) return "completed";
+  if (status === "suspended") return "blocked";
+  if (status === "error") return "failed";
+  return status;
+}
+
+function normalizeIntakeDecision(value: string | null): IntakeDecision {
+  return value === "rejected" ? "rejected" : "accepted";
+}
+
 function toTask(row: TaskRow): Task {
+  const status = normalizeStoredStatus(row.status);
+  const structuredOutput = parseStructuredOutput(row.structured_output);
+
   return {
     id: row.id,
     taskKey: row.task_key,
@@ -143,11 +207,21 @@ function toTask(row: TaskRow): Task {
     issueTitle: row.issue_title,
     issueBody: row.issue_body || "",
     issueUrl: row.issue_url,
+    triggerActor: row.trigger_actor,
+    triggerAction: row.trigger_action,
+    authorizationReason: row.authorization_reason,
+    intakeDecision: normalizeIntakeDecision(row.intake_decision),
+    suggestedTestCommand: row.suggested_test_command,
     devinSessionId: row.devin_session_id,
     devinSessionUrl: row.devin_session_url,
-    status: row.status,
-    statusDetail: row.status_detail,
-    structuredOutput: parseStructuredOutput(row.structured_output),
+    status,
+    statusDetail: normalizeTaskStatusDetail({
+      status,
+      statusDetail: row.status_detail,
+      prUrl: row.pr_url,
+      structuredOutput,
+    }),
+    structuredOutput,
     prUrl: row.pr_url,
     blocker: row.blocker,
     error: row.error,
@@ -155,7 +229,6 @@ function toTask(row: TaskRow): Task {
     updatedAt: row.updated_at,
     completedAt: row.completed_at,
     durationSeconds: row.duration_seconds,
-    acusConsumed: row.acus_consumed,
     acceptedCommentPostedAt: row.accepted_comment_posted_at,
     sessionCommentPostedAt: row.session_comment_posted_at,
     finalCommentPostedAt: row.final_comment_posted_at,
@@ -164,8 +237,26 @@ function toTask(row: TaskRow): Task {
 
 export function createTask(input: CreateTaskInput) {
   const key = taskKey(input.repoFullName, input.issueNumber);
+  const intakeDecision = input.intakeDecision || "accepted";
+  const status = intakeDecision === "rejected" ? "rejected" : "accepted";
   const existing = findTaskByIssue(input.repoFullName, input.issueNumber);
-  if (existing) return { created: false, task: existing };
+  if (existing) {
+    if (existing.intakeDecision === "rejected" && intakeDecision === "accepted") {
+      const promotedTask = updateTask(existing.id, {
+        authorizationReason: input.authorizationReason ?? null,
+        intakeDecision: "accepted",
+        startedAt: new Date().toISOString(),
+        status: "accepted",
+        suggestedTestCommand: input.suggestedTestCommand ?? null,
+        triggerAction: input.triggerAction ?? null,
+        triggerActor: input.triggerActor ?? null,
+      })!;
+
+      return { created: false, promoted: true, task: promotedTask };
+    }
+
+    return { created: false, promoted: false, task: existing };
+  }
 
   const now = new Date().toISOString();
   getDb()
@@ -179,11 +270,16 @@ export function createTask(input: CreateTaskInput) {
         issue_title,
         issue_body,
         issue_url,
+        trigger_actor,
+        trigger_action,
+        authorization_reason,
+        intake_decision,
+        suggested_test_command,
         status,
         started_at,
         updated_at,
         raw_event
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     )
     .run(
@@ -194,7 +290,12 @@ export function createTask(input: CreateTaskInput) {
       input.issueTitle,
       input.issueBody,
       input.issueUrl,
-      "accepted",
+      input.triggerActor ?? null,
+      input.triggerAction ?? null,
+      input.authorizationReason ?? null,
+      intakeDecision,
+      input.suggestedTestCommand ?? null,
+      status,
       now,
       now,
       JSON.stringify(input.rawEvent),
@@ -202,6 +303,7 @@ export function createTask(input: CreateTaskInput) {
 
   return {
     created: true,
+    promoted: false,
     task: findTaskByIssue(input.repoFullName, input.issueNumber)!,
   };
 }
@@ -236,7 +338,7 @@ export function listActiveTasks() {
       SELECT * FROM tasks
       WHERE devin_session_id IS NOT NULL
         AND final_comment_posted_at IS NULL
-        AND status NOT IN ('finished', 'review_required', 'failed', 'blocked', 'error', 'suspended', 'exit')
+        AND status NOT IN ('completed', 'finished', 'review_required', 'failed', 'blocked', 'error', 'suspended', 'exit', 'rejected')
       ORDER BY datetime(started_at) ASC
     `,
     )
@@ -247,6 +349,11 @@ export function listActiveTasks() {
 const updateColumns: Record<keyof TaskUpdate, string> = {
   devinSessionId: "devin_session_id",
   devinSessionUrl: "devin_session_url",
+  triggerActor: "trigger_actor",
+  triggerAction: "trigger_action",
+  authorizationReason: "authorization_reason",
+  intakeDecision: "intake_decision",
+  suggestedTestCommand: "suggested_test_command",
   status: "status",
   statusDetail: "status_detail",
   structuredOutput: "structured_output",
@@ -255,10 +362,10 @@ const updateColumns: Record<keyof TaskUpdate, string> = {
   error: "error",
   completedAt: "completed_at",
   durationSeconds: "duration_seconds",
-  acusConsumed: "acus_consumed",
   acceptedCommentPostedAt: "accepted_comment_posted_at",
   sessionCommentPostedAt: "session_comment_posted_at",
   finalCommentPostedAt: "final_comment_posted_at",
+  startedAt: "started_at",
 };
 
 function serializeUpdateValue(key: keyof TaskUpdate, value: unknown) {
@@ -291,15 +398,9 @@ export function updateTask(id: number, patch: TaskUpdate) {
 }
 
 export function isTerminalStatus(status: string) {
-  return [
-    "finished",
-    "review_required",
-    "failed",
-    "blocked",
-    "error",
-    "suspended",
-    "exit",
-  ].includes(status);
+  return ["completed", "failed", "blocked", "rejected"].includes(
+    normalizeStoredStatus(status),
+  );
 }
 
 export function setTaskStatus(id: number, status: TaskStatus, detail?: string | null) {

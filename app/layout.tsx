@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Devin Remediation Queue",
-  description: "GitHub issue to Devin remediation automation dashboard",
+  title: "Superset Remediation Lane",
+  description: "Controlled Devin remediation workflow for Superset maintainers",
 };
 
 export default function RootLayout({

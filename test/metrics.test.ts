@@ -1,7 +1,11 @@
 import { calculateMetrics } from "@/lib/metrics";
-import type { Task } from "@/lib/types";
+import type { IntakeDecision, Task } from "@/lib/types";
 
-function task(status: string, durationSeconds?: number, acusConsumed?: number): Task {
+function task(
+  status: string,
+  durationSeconds?: number,
+  intakeDecision: IntakeDecision = "accepted",
+): Task {
   return {
     id: Math.random(),
     taskKey: "repo#1",
@@ -11,6 +15,11 @@ function task(status: string, durationSeconds?: number, acusConsumed?: number): 
     issueTitle: "Issue",
     issueBody: "",
     issueUrl: "https://github.com/repo/name/issues/1",
+    triggerActor: "alice",
+    triggerAction: "labeled",
+    authorizationReason: "authorized",
+    intakeDecision,
+    suggestedTestCommand: "yarn test",
     devinSessionId: null,
     devinSessionUrl: null,
     status,
@@ -23,7 +32,6 @@ function task(status: string, durationSeconds?: number, acusConsumed?: number): 
     updatedAt: new Date().toISOString(),
     completedAt: null,
     durationSeconds: durationSeconds ?? null,
-    acusConsumed: acusConsumed ?? null,
     acceptedCommentPostedAt: null,
     sessionCommentPostedAt: null,
     finalCommentPostedAt: null,
@@ -33,10 +41,11 @@ function task(status: string, durationSeconds?: number, acusConsumed?: number): 
 describe("metrics", () => {
   test("calculates dashboard metrics", () => {
     const metrics = calculateMetrics([
-      task("running"),
-      task("finished", 10, 0.2),
-      task("blocked", 30, 0.4),
-      task("failed", 20, 0.1),
+      task("working"),
+      task("completed", 10),
+      task("blocked", 30),
+      task("failed", 20),
+      task("rejected", 100, "rejected"),
     ]);
 
     expect(metrics.total).toBe(4);
@@ -46,6 +55,5 @@ describe("metrics", () => {
     expect(metrics.failed).toBe(1);
     expect(metrics.successRate).toBeCloseTo(1 / 3);
     expect(metrics.averageDurationSeconds).toBe(20);
-    expect(metrics.totalAcusConsumed).toBe(0.7);
   });
 });

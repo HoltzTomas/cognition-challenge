@@ -2,18 +2,14 @@ export const REMEDIATION_LABEL = "devin-remediate";
 
 export type TaskStatus =
   | "accepted"
-  | "starting"
-  | "new"
-  | "claimed"
-  | "running"
-  | "resuming"
-  | "finished"
-  | "review_required"
+  | "session_created"
+  | "working"
+  | "completed"
   | "blocked"
   | "failed"
-  | "error"
-  | "suspended"
-  | "exit";
+  | "rejected";
+
+export type IntakeDecision = "accepted" | "rejected";
 
 export type StructuredOutput = {
   status?: string;
@@ -21,7 +17,6 @@ export type StructuredOutput = {
   tests_run?: string[];
   pr_url?: string;
   blocker?: string;
-  acu_consumed?: number;
 };
 
 export type Task = {
@@ -33,6 +28,11 @@ export type Task = {
   issueTitle: string;
   issueBody: string;
   issueUrl: string;
+  triggerActor: string | null;
+  triggerAction: string | null;
+  authorizationReason: string | null;
+  intakeDecision: IntakeDecision;
+  suggestedTestCommand: string | null;
   devinSessionId: string | null;
   devinSessionUrl: string | null;
   status: TaskStatus | string;
@@ -45,7 +45,6 @@ export type Task = {
   updatedAt: string;
   completedAt: string | null;
   durationSeconds: number | null;
-  acusConsumed: number | null;
   acceptedCommentPostedAt: string | null;
   sessionCommentPostedAt: string | null;
   finalCommentPostedAt: string | null;
@@ -67,7 +66,6 @@ export type GitHubIssueEvent = {
 };
 
 export type DevinSession = {
-  acus_consumed?: number;
   pull_requests?: Array<{
     pr_state?: string;
     pr_url?: string;
@@ -88,5 +86,4 @@ export type Metrics = {
   failed: number;
   successRate: number;
   averageDurationSeconds: number | null;
-  totalAcusConsumed: number | null;
 };

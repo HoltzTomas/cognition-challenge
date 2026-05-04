@@ -8,13 +8,14 @@ import {
   updateTask,
 } from "@/lib/db";
 import { postIssueComment } from "@/lib/github/client";
-import { buildDevinPrompt } from "@/lib/prompt";
+import { buildDevinPrompt, extractIssueSections } from "@/lib/prompt";
+import { formatStatusDetail, normalizeTaskStatusDetail } from "@/lib/status-detail";
 import {
   authorizeGitHubIssueEvent,
   isRemediationTrigger,
   parseGitHubIssuePayload,
 } from "@/lib/webhook";
-import type { DevinSession, GitHubIssueEvent, StructuredOutput, Task } from "@/lib/types";
+import type { DevinSession, GitHubIssueEvent, Task } from "@/lib/types";
 
 function nowIso() {
   return new Date().toISOString();
@@ -43,12 +44,13 @@ async function safeComment(task: Task, body: string) {
 
 function acceptedComment(task: Task) {
   return [
-    "Devin remediation automation accepted this issue.",
+    "Devin remediation accepted for this issue.",
     "",
+    `Triggered by: ${task.triggerActor ? `@${task.triggerActor}` : "unknown"} via ${task.triggerAction || "GitHub issue event"}`,
     `Task ID: ${task.id}`,
     `Dashboard: ${dashboardUrl(task.id)}`,
     "",
-    "I will create a Devin session, track progress, and report back here with a PR or blocker.",
+    "I will create a Devin session and report back here with a PR or blocker.",
   ].join("\n");
 }
 
@@ -62,23 +64,32 @@ function sessionCreatedComment(task: Task) {
 }
 
 function finalComment(task: Task) {
-  const headline =
-    task.status === "review_required"
-      ? "Devin remediation is ready for human review."
-      : `Devin remediation finished with status: ${task.status}.`;
+  const headline = (() => {
+    if (task.status === "completed" && task.prUrl) {
+      return "Devin remediation completed and is ready for normal GitHub review.";
+    }
+    if (task.status === "completed") return "Devin remediation completed.";
+    if (task.status === "blocked") {
+      return "Devin remediation is blocked and needs maintainer input.";
+    }
+    return "Devin remediation failed.";
+  })();
+
   const lines = [
     headline,
     "",
-    `Status detail: ${task.statusDetail || "n/a"}`,
+    `Status detail: ${formatStatusDetail(task.statusDetail)}`,
     `Duration: ${formatDuration(task.durationSeconds)}`,
+    `Human review required: ${
+      task.prUrl || task.status === "blocked" || task.status === "failed"
+        ? "yes"
+        : "no"
+    }`,
   ];
-
-  if (typeof task.acusConsumed === "number") {
-    lines.push(`ACUs consumed: ${task.acusConsumed}`);
-  }
 
   if (task.prUrl) {
     lines.push(`PR: ${task.prUrl}`);
+    lines.push("Please review and merge through the normal GitHub PR workflow.");
   }
 
   if (task.blocker || task.error) {
@@ -118,27 +129,39 @@ function firstPrUrl(session: DevinSession) {
   );
 }
 
-function structuredAcu(session: DevinSession) {
-  const structured = session.structured_output as StructuredOutput | null | undefined;
-  return structured?.acu_consumed ?? session.acus_consumed ?? null;
+function suggestedTestCommand(event: GitHubIssueEvent) {
+  return extractIssueSections(event.issueBody).suggestedTestCommand;
 }
 
-function deriveStatus(session: DevinSession) {
+export function deriveStatus(session: DevinSession) {
   const structuredStatus = session.structured_output?.status;
+  const prUrl = firstPrUrl(session);
 
+  if (prUrl) return "completed";
   if (session.status === "error") return "failed";
   if (session.status === "suspended") return "blocked";
-  if (structuredStatus === "blocked") return "blocked";
-  if (structuredStatus === "failed") return "failed";
-  if (structuredStatus === "succeeded" && firstPrUrl(session)) {
-    return session.status_detail === "waiting_for_user"
-      ? "review_required"
-      : "finished";
-  }
+
   if (session.status_detail === "finished" || session.status === "exit") {
-    return "finished";
+    if (structuredStatus === "blocked") return "blocked";
+    if (structuredStatus === "failed") return "failed";
+    return "completed";
   }
-  return session.status;
+
+  if (session.status_detail === "waiting_for_user") {
+    if (structuredStatus === "failed") return "failed";
+    return "blocked";
+  }
+
+  return "working";
+}
+
+export function deriveStatusDetail(session: DevinSession, status: string) {
+  return normalizeTaskStatusDetail({
+    status,
+    statusDetail: session.status_detail || session.status || null,
+    prUrl: firstPrUrl(session),
+    structuredOutput: session.structured_output || null,
+  });
 }
 
 function deriveBlocker(session: DevinSession, status: string) {
@@ -150,7 +173,7 @@ function deriveBlocker(session: DevinSession, status: string) {
 }
 
 function isTerminal(status: string) {
-  return ["finished", "review_required", "failed", "blocked"].includes(status);
+  return ["completed", "failed", "blocked"].includes(status);
 }
 
 export async function handleGitHubIssueEvent(event: GitHubIssueEvent) {
@@ -162,25 +185,40 @@ export async function handleGitHubIssueEvent(event: GitHubIssueEvent) {
   }
 
   const authorization = authorizeGitHubIssueEvent(event);
-  if (!authorization.authorized) {
-    return {
-      accepted: false,
-      authorized: false,
-      reason: authorization.reason,
-    };
-  }
-
-  const { created, task } = createTask({
+  const commonTaskInput = {
     repoFullName: event.repoFullName,
     repoUrl: event.repoUrl,
     issueNumber: event.issueNumber,
     issueTitle: event.issueTitle,
     issueBody: event.issueBody,
     issueUrl: event.issueUrl,
+    triggerActor: event.actorLogin,
+    triggerAction: event.action,
+    authorizationReason: authorization.reason,
+    suggestedTestCommand: suggestedTestCommand(event),
     rawEvent: event.raw,
+  };
+
+  if (!authorization.authorized) {
+    const { task } = createTask({
+      ...commonTaskInput,
+      intakeDecision: "rejected",
+    });
+
+    return {
+      accepted: false,
+      authorized: false,
+      task,
+      reason: authorization.reason,
+    };
+  }
+
+  const { created, promoted, task } = createTask({
+    ...commonTaskInput,
+    intakeDecision: "accepted",
   });
 
-  if (!created) {
+  if (!created && !promoted) {
     return {
       accepted: false,
       duplicate: true,
@@ -190,7 +228,7 @@ export async function handleGitHubIssueEvent(event: GitHubIssueEvent) {
   }
 
   await safeComment(task, acceptedComment(task));
-  updateTask(task.id, { acceptedCommentPostedAt: nowIso(), status: "starting" });
+  updateTask(task.id, { acceptedCommentPostedAt: nowIso(), status: "accepted" });
 
   try {
     const prompt = buildDevinPrompt(event);
@@ -198,10 +236,9 @@ export async function handleGitHubIssueEvent(event: GitHubIssueEvent) {
     const updatedTask = updateTask(task.id, {
       devinSessionId: session.session_id,
       devinSessionUrl: session.url,
-      status: session.status,
-      statusDetail: session.status_detail || null,
+      status: "session_created",
+      statusDetail: session.status_detail || session.status,
       structuredOutput: session.structured_output || null,
-      acusConsumed: session.acus_consumed ?? null,
     })!;
 
     await safeComment(updatedTask, sessionCreatedComment(updatedTask));
@@ -212,6 +249,7 @@ export async function handleGitHubIssueEvent(event: GitHubIssueEvent) {
     return {
       accepted: true,
       duplicate: false,
+      promoted,
       task: finalTask,
     };
   } catch (error) {
@@ -228,6 +266,7 @@ export async function handleGitHubIssueEvent(event: GitHubIssueEvent) {
     return {
       accepted: true,
       duplicate: false,
+      promoted,
       task: getTaskById(task.id),
       error: failedTask.error,
     };
@@ -252,7 +291,7 @@ export async function pollActiveDevinSessions() {
       const completedAt = isTerminal(status) ? nowIso() : task.completedAt;
       const updatedTask = updateTask(task.id, {
         status,
-        statusDetail: session.status_detail || session.status,
+        statusDetail: deriveStatusDetail(session, status),
         structuredOutput: session.structured_output || null,
         prUrl: firstPrUrl(session),
         blocker: deriveBlocker(session, status),
@@ -260,7 +299,6 @@ export async function pollActiveDevinSessions() {
         durationSeconds: completedAt
           ? durationSeconds(task.startedAt, completedAt)
           : task.durationSeconds,
-        acusConsumed: structuredAcu(session),
       })!;
 
       if (isTerminal(status) && !updatedTask.finalCommentPostedAt) {

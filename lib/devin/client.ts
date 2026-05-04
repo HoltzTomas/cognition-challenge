@@ -7,11 +7,6 @@ export type CreateDevinSessionInput = {
   prompt: string;
 };
 
-function maxAcuLimit() {
-  const parsed = Number(process.env.DEVIN_MAX_ACU_LIMIT || "5");
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
-}
-
 function isDryRun() {
   return (
     process.env.DEVIN_DRY_RUN === "true" ||
@@ -39,9 +34,6 @@ function structuredOutputSchema() {
       },
       blocker: {
         type: "string",
-      },
-      acu_consumed: {
-        type: "number",
       },
     },
     required: ["status", "summary", "tests_run"],
@@ -81,7 +73,6 @@ export async function createDevinSession({
       event.issueNumber
     }`;
     return {
-      acus_consumed: 0,
       pull_requests: [],
       session_id: id,
       status: "running",
@@ -99,7 +90,6 @@ export async function createDevinSession({
       prompt,
       repos: [event.repoUrl],
       session_links: [event.issueUrl],
-      max_acu_limit: maxAcuLimit(),
       structured_output_required: true,
       structured_output_schema: structuredOutputSchema(),
       tags: ["devin-remediate", "cognition-challenge", "superset"],
@@ -111,7 +101,6 @@ export async function createDevinSession({
 export async function getDevinSession(devinSessionId: string) {
   if (isDryRun()) {
     return {
-      acus_consumed: 0.2,
       pull_requests: [
         {
           pr_state: "open",
@@ -127,7 +116,6 @@ export async function getDevinSession(devinSessionId: string) {
           "Dry-run session completed. Real Devin polling will replace this with session output.",
         tests_run: ["dry-run: no external Devin call made"],
         pr_url: process.env.DRY_RUN_PR_URL || "https://github.com/example/superset/pull/1",
-        acu_consumed: 0.2,
       },
       url: `https://app.devin.ai/sessions/${devinSessionId}`,
     } satisfies DevinSession;
