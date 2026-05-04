@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+  poller:
+    build: .
+    command: ["node", "scripts/poll-devin.mjs"]
+    depends_on:
+      - app
+    env_file:
+      - .env
+    environment:
+      POLL_BASE_URL: http://app:3000
+      POLL_INTERVAL_SECONDS: 60

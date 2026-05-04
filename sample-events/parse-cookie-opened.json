@@ -1,0 +1,25 @@
+{
+  "action": "opened",
+  "repository": {
+    "full_name": "your-org/superset",
+    "html_url": "https://github.com/your-org/superset"
+  },
+  "issue": {
+    "author_association": "OWNER",
+    "number": 101,
+    "title": "[devin-remediate] parseCookie mishandles compact cookies and values containing equals signs",
+    "html_url": "https://github.com/your-org/superset/issues/101",
+    "body": "## Problem\n`parseCookie` currently splits on `; ` and then splits every `=`, so compact cookies like `a=1;b=2` and values like `token=a=b=c` are mishandled.\n\n## Target\n`superset-frontend/src/utils/parseCookie.ts`\n\n## Acceptance criteria\n- Split cookie pairs on semicolons with optional surrounding whitespace.\n- Split each pair only on the first equals sign.\n- Preserve values that contain equals signs.\n- Keep empty cookie input returning `{}`.\n\n## Suggested test command\n`cd superset-frontend && yarn test src/utils/parseCookie.test.ts`\n\nPlease open a PR against this fork.",
+    "labels": [
+      {
+        "name": "devin-remediate"
+      }
+    ]
+  },
+  "label": {
+    "name": "devin-remediate"
+  },
+  "sender": {
+    "login": "your-github-user"
+  }
+}

@@ -1,0 +1,261 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #18212f;
+  --muted: #647083;
+  --line: #dce2ea;
+  --accent: #126a6f;
+  --accent-soft: #e2f3f2;
+  --success: #17623a;
+  --success-soft: #e3f5ea;
+  --blocked: #8a5a10;
+  --blocked-soft: #fff1d6;
+  --review: #8a5a10;
+  --review-soft: #fff1d6;
+  --failed: #a32929;
+  --failed-soft: #ffe5e5;
+  --active: #285f9f;
+  --active-soft: #e7f0fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+main {
+  width: min(1440px, calc(100vw - 40px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 1.05;
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.headerActions a,
+button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 700;
+}
+
+button:hover,
+.headerActions a:hover {
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.metricGrid div {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.metricGrid span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.metricGrid strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.taskSection {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.emptyState {
+  padding: 28px 20px;
+  color: var(--muted);
+}
+
+code {
+  background: #eef1f5;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 2px 5px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+.issueTitle {
+  max-width: 360px;
+  font-weight: 700;
+}
+
+.meta,
+.muted {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 7px 10px;
+}
+
+.statusSuccess {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.statusBlocked {
+  background: var(--blocked-soft);
+  color: var(--blocked);
+}
+
+.statusReview {
+  background: var(--review-soft);
+  color: var(--review);
+}
+
+.statusFailed {
+  background: var(--failed-soft);
+  color: var(--failed);
+}
+
+.statusActive {
+  background: var(--active-soft);
+  color: var(--active);
+}
+
+.boundedText {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 960px) {
+  main {
+    width: min(100% - 24px, 1440px);
+    padding-top: 24px;
+  }
+
+  .pageHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

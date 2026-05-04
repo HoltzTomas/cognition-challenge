@@ -1,0 +1,10 @@
+.env
+.env.local
+.next/
+node_modules/
+coverage/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+npm-debug.log*
+tsconfig.tsbuildinfo

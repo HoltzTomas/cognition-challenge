@@ -1,0 +1,25 @@
+{
+  "action": "labeled",
+  "repository": {
+    "full_name": "your-org/superset",
+    "html_url": "https://github.com/your-org/superset"
+  },
+  "issue": {
+    "author_association": "OWNER",
+    "number": 102,
+    "title": "[devin-remediate] getOwnerName renders undefined for partial owner records",
+    "html_url": "https://github.com/your-org/superset/issues/102",
+    "body": "## Problem\n`Owner.first_name`, `last_name`, and `full_name` are optional, but `getOwnerName` can produce strings like `Ada undefined` or `undefined Lovelace` for partial owner records.\n\n## Target\n`superset-frontend/src/utils/getOwnerName.ts`\n\n## Acceptance criteria\n- Prefer `full_name` when present.\n- Otherwise join the available first and last name parts without rendering `undefined`.\n- Return `email` when no name fields are present.\n- Return an empty string when no displayable owner field exists.\n\n## Suggested test command\n`cd superset-frontend && yarn test src/utils/getOwnerName.test.ts`\n\nPlease open a PR against this fork.",
+    "labels": [
+      {
+        "name": "devin-remediate"
+      }
+    ]
+  },
+  "label": {
+    "name": "devin-remediate"
+  },
+  "sender": {
+    "login": "your-github-user"
+  }
+}
