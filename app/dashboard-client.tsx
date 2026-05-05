@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { TaskBoard } from "@/app/task-board";
 import type { Metrics, Task } from "@/lib/types";
 
+type RuntimeConfig = {
+  appBaseUrl: string;
+  simulationEnabled: boolean;
+};
+
 function formatDuration(seconds: number | null) {
   if (typeof seconds !== "number") return "n/a";
   const minutes = Math.floor(seconds / 60);
@@ -126,12 +131,15 @@ function ObservabilityRail({
 }
 
 export function DashboardClient({
+  initialConfig,
   initialMetrics,
   initialTasks,
 }: {
+  initialConfig: RuntimeConfig;
   initialMetrics: Metrics;
   initialTasks: Task[];
 }) {
+  const [config, setConfig] = useState(initialConfig);
   const [tasks, setTasks] = useState(initialTasks);
   const [metrics, setMetrics] = useState(initialMetrics);
 
@@ -139,19 +147,22 @@ export function DashboardClient({
     let cancelled = false;
 
     async function refreshDashboard() {
-      const [tasksResponse, metricsResponse] = await Promise.all([
+      const [configResponse, tasksResponse, metricsResponse] = await Promise.all([
+        fetch("/api/config", { cache: "no-store" }),
         fetch("/api/tasks", { cache: "no-store" }),
         fetch("/api/metrics", { cache: "no-store" }),
       ]);
 
-      if (!tasksResponse.ok || !metricsResponse.ok) return;
+      if (!configResponse.ok || !tasksResponse.ok || !metricsResponse.ok) return;
 
-      const [tasksPayload, metricsPayload] = await Promise.all([
+      const [configPayload, tasksPayload, metricsPayload] = await Promise.all([
+        configResponse.json() as Promise<RuntimeConfig>,
         tasksResponse.json() as Promise<{ tasks: Task[] }>,
         metricsResponse.json() as Promise<Metrics>,
       ]);
 
       if (cancelled) return;
+      setConfig(configPayload);
       setTasks(tasksPayload.tasks);
       setMetrics(metricsPayload);
     }
@@ -179,7 +190,11 @@ export function DashboardClient({
           <span className="sectionCount">{tasks.length} records</span>
         </div>
 
-        <TaskBoard tasks={tasks} />
+        <TaskBoard
+          appBaseUrl={config.appBaseUrl}
+          simulationEnabled={config.simulationEnabled}
+          tasks={tasks}
+        />
       </section>
 
       <ObservabilityRail metrics={metrics} tasks={tasks} />

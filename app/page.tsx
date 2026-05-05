@@ -8,6 +8,10 @@ export const dynamic = "force-dynamic";
 export default function DashboardPage() {
   const tasks = listTasks();
   const metrics = getMetrics();
+  const config = {
+    appBaseUrl: process.env.APP_BASE_URL || "http://localhost:3000",
+    simulationEnabled: process.env.SIMULATION_ENABLED !== "false",
+  };
 
   return (
     <main className="dashboardShell">
@@ -25,7 +29,11 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <DashboardClient initialMetrics={metrics} initialTasks={tasks} />
+      <DashboardClient
+        initialConfig={config}
+        initialMetrics={metrics}
+        initialTasks={tasks}
+      />
     </main>
   );
 }

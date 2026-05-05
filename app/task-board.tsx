@@ -347,7 +347,15 @@ function TaskDetailsDrawer({
   );
 }
 
-export function TaskBoard({ tasks }: { tasks: Task[] }) {
+export function TaskBoard({
+  appBaseUrl,
+  simulationEnabled,
+  tasks,
+}: {
+  appBaseUrl: string;
+  simulationEnabled: boolean;
+  tasks: Task[];
+}) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedId) || null;
 
@@ -371,10 +379,21 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
   }, [selectedTask]);
 
   if (tasks.length === 0) {
+    const simulateCommand = `curl -X POST ${appBaseUrl.replace(/\/$/, "")}/api/simulate`;
+
     return (
       <div className="emptyState">
-        No remediation sessions yet. Trigger a demo with{" "}
-        <code>curl -X POST http://localhost:3000/api/simulate</code>.
+        {simulationEnabled ? (
+          <>
+            No remediation sessions yet. Trigger a demo with{" "}
+            <code>{simulateCommand}</code>.
+          </>
+        ) : (
+          <>
+            No remediation sessions yet. This hosted demo accepts signed GitHub issue
+            webhooks at <code>{appBaseUrl.replace(/\/$/, "")}/api/webhooks/github</code>.
+          </>
+        )}
       </div>
     );
   }
