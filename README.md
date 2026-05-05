@@ -24,7 +24,6 @@ This repo is the solution repository. The Apache Superset fork is the evidence r
 
 ## Docs
 
-- [Project flow](docs/project-flow.md): architecture, runtime modes, lifecycle, and reproducibility boundary.
 - [Live GitHub setup](docs/live-github-setup.md): configure your own Superset fork, GitHub webhook, ngrok/public URL, Devin credentials, and Docker runtime.
 - [Hosted demo setup](docs/hosted-demo.md): deploy the demo to Railway with Docker, persistent SQLite, and a single-container hosted runtime.
 
@@ -87,7 +86,9 @@ See [docs/live-github-setup.md](docs/live-github-setup.md) for the full checklis
 
 The hosted demo is intentionally not multi-tenant. It is a public, observable instance connected to the author's Superset fork and credentials so reviewers can inspect the live system without configuring their own fork.
 
-If a hosted URL is provided with the submission, open it directly and inspect:
+Hosted demo URL: [https://cognition-challenge-production.up.railway.app/](https://cognition-challenge-production.up.railway.app/)
+
+Open it directly and inspect:
 
 - Current task queue and status history.
 - Devin session and PR/blocker links.
@@ -209,12 +210,3 @@ Each issue body should include the problem, target file, acceptance criteria, su
 - `GET /api/tasks`: task state.
 - `GET /api/metrics`: aggregate reporting.
 - `POST /api/cron/poll-devin`: poller endpoint for active Devin sessions; protected when `CRON_SECRET` is set.
-
-## Loom Demo Flow
-
-1. Explain the three reproduction paths.
-2. Show the Docker-only simulation for reviewer reproducibility.
-3. Show a Superset fork issue labeled `devin-remediate`.
-4. Show concise GitHub comments, Devin session URL, and PR/blocker result.
-5. Show the dashboard updating with metrics, lifecycle state, and review handoff.
-6. Close with real-customer extensions: scanner ingestion, Jira/Linear intake, approval gates, and richer org-level metrics.
