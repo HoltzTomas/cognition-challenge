@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { formatStatusDetail } from "@/lib/status-detail";
 import type { Task } from "@/lib/types";
@@ -20,6 +20,10 @@ function formatDuration(seconds: number | null) {
   return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
 }
 
+function statusLabel(status: string) {
+  return status.replaceAll("_", " ");
+}
+
 function statusClass(status: string) {
   if (status === "completed") return "status statusSuccess";
   if (status === "blocked") return "status statusBlocked";
@@ -36,6 +40,15 @@ function externalLink(url: string | null, label: string) {
   if (!url) return <span className="muted">n/a</span>;
   return (
     <a href={url} target="_blank" rel="noreferrer">
+      {label}
+    </a>
+  );
+}
+
+function QuickLink({ label, url }: { label: string; url: string | null }) {
+  if (!url) return null;
+  return (
+    <a className="quickLink" href={url} target="_blank" rel="noreferrer">
       {label}
     </a>
   );
@@ -130,7 +143,7 @@ function Field({
   value: ReactNode;
 }) {
   return (
-    <div>
+    <div className="detailField">
       <div className="fieldLabel">{label}</div>
       <div>{value}</div>
     </div>
@@ -139,83 +152,144 @@ function Field({
 
 function TaskTile({
   task,
-  expanded,
-  onToggle,
+  selected,
+  onSelect,
 }: {
   task: Task;
-  expanded: boolean;
-  onToggle: () => void;
+  selected: boolean;
+  onSelect: () => void;
 }) {
-  const tests = testsRun(task);
-  const detailsId = `task-details-${task.id}`;
+  const drawerId = `session-drawer-${task.id}`;
 
   return (
     <article
       id={`task-${task.id}`}
-      className={expanded ? "taskTile taskTileExpanded" : "taskTile"}
+      className={selected ? "sessionCard sessionCardSelected" : "sessionCard"}
     >
-      <div className="taskTileTop">
+      <div className="sessionCardTop">
         <div className="taskTitleBlock">
           <div className="issueTitle">{externalLink(task.issueUrl, task.issueTitle)}</div>
           <div className="meta">
             {task.repoFullName}#{task.issueNumber}
           </div>
         </div>
-        <div className="tileActions">
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-controls={detailsId}
-            onClick={onToggle}
-          >
-            {expanded ? "Hide details" : "Show details"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className="inspectButton"
+          aria-expanded={selected}
+          aria-controls={drawerId}
+          onClick={onSelect}
+        >
+          {selected ? "Viewing" : "Show details"}
+        </button>
       </div>
 
       <div className="tileStatusLine">
         <span className={decisionClass(task.intakeDecision)}>{task.intakeDecision}</span>
-        <span className={statusClass(task.status)}>{task.status}</span>
+        <span className={statusClass(task.status)}>{statusLabel(task.status)}</span>
         <span className="reviewBadge">Review: {reviewState(task)}</span>
+        <span className="durationPill">Duration {formatDuration(task.durationSeconds)}</span>
       </div>
 
-      <div className="tileSummaryGrid">
+      <div className="sessionSummary">
+        <Field
+          label="Status detail"
+          value={<span>{formatStatusDetail(task.statusDetail)}</span>}
+        />
         <Field
           label="Control"
           value={
             <>
               <div>
-                Trigger: {task.triggerActor ? `@${task.triggerActor}` : "unknown"} via{" "}
+                {task.triggerActor ? `@${task.triggerActor}` : "Unknown actor"} via{" "}
                 {task.triggerAction || "GitHub"}
               </div>
               <div className="muted">{task.authorizationReason || "No decision detail"}</div>
             </>
           }
         />
-        <Field
-          label="Status detail"
-          value={
-            <>
-              <div>{formatStatusDetail(task.statusDetail)}</div>
-              <div className="muted">Duration: {formatDuration(task.durationSeconds)}</div>
-            </>
-          }
-        />
-        <Field
-          label="Workflow links"
-          value={
-            <div className="linkStack">
-              {externalLink(task.issueUrl, "GitHub issue")}
-              {externalLink(task.devinSessionUrl, "Devin session")}
-              {externalLink(task.prUrl, "Pull request")}
-            </div>
-          }
-        />
+        <div className="quickLinks" aria-label="Workflow links">
+          <QuickLink label="Issue" url={task.issueUrl} />
+          <QuickLink label="Devin" url={task.devinSessionUrl} />
+          <QuickLink label="PR" url={task.prUrl} />
+        </div>
       </div>
+    </article>
+  );
+}
 
-      {expanded ? (
-        <div id={detailsId} className="tileDetails">
-          <section className="detailColumn">
+function TaskDetailsDrawer({
+  task,
+  onClose,
+}: {
+  task: Task;
+  onClose: () => void;
+}) {
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const tests = testsRun(task);
+  const titleId = `session-drawer-title-${task.id}`;
+
+  useEffect(() => {
+    drawerRef.current?.focus();
+  }, [task.id]);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="drawerBackdrop"
+        aria-label="Close session details"
+        onClick={onClose}
+      />
+      <aside
+        id={`session-drawer-${task.id}`}
+        ref={drawerRef}
+        className="detailDrawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
+        <div className="drawerHeader">
+          <div>
+            <p className="drawerKicker">Session Details</p>
+            <h2 id={titleId}>{task.issueTitle}</h2>
+            <div className="drawerMeta">
+              {task.repoFullName}#{task.issueNumber}
+            </div>
+          </div>
+          <button type="button" className="closeButton" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        <div className="drawerBody">
+          <section className="drawerSection" aria-label="Session state">
+            <div className="drawerStatusRow">
+              <span className={decisionClass(task.intakeDecision)}>{task.intakeDecision}</span>
+              <span className={statusClass(task.status)}>{statusLabel(task.status)}</span>
+              <span className="reviewBadge">Review: {reviewState(task)}</span>
+            </div>
+            <Field
+              label="Status detail"
+              value={formatStatusDetail(task.statusDetail)}
+            />
+            <Field label="Duration" value={formatDuration(task.durationSeconds)} />
+          </section>
+
+          <section className="drawerSection" aria-label="Workflow links">
+            <h3>Workflow Links</h3>
+            <div className="drawerLinkGrid">
+              <Field label="GitHub issue" value={externalLink(task.issueUrl, "Open issue")} />
+              <Field
+                label="Devin session"
+                value={externalLink(task.devinSessionUrl, "Open session")}
+              />
+              <Field label="Pull request" value={externalLink(task.prUrl, "Open PR")} />
+            </div>
+          </section>
+
+          <section className="drawerSection" aria-label="Quality signals">
             <h3>Quality Signals</h3>
             <Field
               label="Suggested test"
@@ -243,50 +317,84 @@ function TaskTile({
             ) : null}
           </section>
 
-          <section className="detailColumn">
+          <section className="drawerSection" aria-label="Lifecycle">
             <h3>Lifecycle</h3>
             <Timeline task={task} />
           </section>
+
+          <section className="drawerSection" aria-label="Automation provenance">
+            <h3>Automation Provenance</h3>
+            <div className="provenanceGrid">
+              <Field
+                label="Trigger"
+                value={`${task.triggerAction || "GitHub"} by ${
+                  task.triggerActor ? `@${task.triggerActor}` : "unknown actor"
+                }`}
+              />
+              <Field
+                label="Authorization"
+                value={task.authorizationReason || "No decision detail"}
+              />
+              <Field label="Session id" value={task.devinSessionId || "n/a"} />
+              <Field label="Started" value={formatDate(task.startedAt)} />
+              <Field label="Updated" value={formatDate(task.updatedAt)} />
+              <Field label="Completed" value={formatDate(task.completedAt)} />
+            </div>
+          </section>
         </div>
-      ) : null}
-    </article>
+      </aside>
+    </>
   );
 }
 
 export function TaskBoard({ tasks }: { tasks: Task[] }) {
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedTask = tasks.find(task => task.id === selectedId) || null;
+
+  useEffect(() => {
+    if (selectedId !== null && !tasks.some(task => task.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [selectedId, tasks]);
+
+  useEffect(() => {
+    if (!selectedTask) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setSelectedId(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedTask]);
 
   if (tasks.length === 0) {
     return (
       <div className="emptyState">
-        No remediation tasks yet. Trigger a demo with{" "}
+        No remediation sessions yet. Trigger a demo with{" "}
         <code>curl -X POST http://localhost:3000/api/simulate</code>.
       </div>
     );
   }
 
-  function toggleTask(id: number) {
-    setExpandedIds(current => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
   return (
-    <div className="taskGrid">
-      {tasks.map(task => (
-        <TaskTile
-          key={task.id}
-          task={task}
-          expanded={expandedIds.has(task.id)}
-          onToggle={() => toggleTask(task.id)}
-        />
-      ))}
-    </div>
+    <>
+      <div className="sessionList">
+        {tasks.map(task => (
+          <TaskTile
+            key={task.id}
+            task={task}
+            selected={task.id === selectedId}
+            onSelect={() => setSelectedId(task.id)}
+          />
+        ))}
+      </div>
+
+      {selectedTask ? (
+        <TaskDetailsDrawer task={selectedTask} onClose={() => setSelectedId(null)} />
+      ) : null}
+    </>
   );
 }
