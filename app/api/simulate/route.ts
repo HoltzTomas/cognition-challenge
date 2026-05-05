@@ -4,6 +4,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  if (process.env.SIMULATION_ENABLED === "false") {
+    return Response.json(
+      { error: "Simulation endpoint is disabled for this deployment." },
+      { status: 403 },
+    );
+  }
+
   try {
     const rawBody = await req.text();
     const payload = rawBody.trim() ? JSON.parse(rawBody) : undefined;

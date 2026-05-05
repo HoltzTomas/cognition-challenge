@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "simulate:workflow": "node scripts/simulate-workflow.mjs",
     "start": "next start",
+    "start:hosted": "node scripts/start-hosted.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

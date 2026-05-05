@@ -12,30 +12,152 @@ A full-stack Next.js App Router demo for Cognition's take-home challenge. It add
 - GitHub issue comments for accepted, session-created, and final PR/blocker updates.
 - Dashboard metrics and task lifecycle visibility for maintainers and engineering leads.
 
-## Project Diagram
+## Choose Your Path
 
-See [docs/project-flow.md](docs/project-flow.md) for architecture, lifecycle, and status diagrams.
+| Path | Best For | What You Need | What It Proves |
+| --- | --- | --- | --- |
+| **A. Run the simulation locally** | Fast reviewer reproduction | Docker only | Signed GitHub webhook intake, HMAC verification, task state, dry-run Devin sessions, polling, metrics, and dashboard. |
+| **B. Run live against your own Superset fork** | Full external-system reproduction | Docker, Devin credentials, GitHub token, Superset fork, and ngrok/public URL | Real GitHub webhooks, real Devin sessions, issue comments, and PR/blocker status on the reviewer's fork. |
+| **C. View the hosted live demo** | Quick inspection without setup | A provided public demo URL | The same automation running against the author's Superset fork with live credentials and persistent hosted state. |
+
+This repo is the solution repository. The Apache Superset fork is the evidence repository for selected issues, labels, comments, Devin sessions, and PRs. Reviewers do not need write access to the author's fork to run Path A or Path B.
+
+## Docs
+
+- [Project flow](docs/project-flow.md): architecture, runtime modes, lifecycle, and reproducibility boundary.
+- [Live GitHub setup](docs/live-github-setup.md): configure your own Superset fork, GitHub webhook, ngrok/public URL, Devin credentials, and Docker runtime.
+- [Hosted demo setup](docs/hosted-demo.md): deploy the demo to Railway with Docker, persistent SQLite, and a single-container hosted runtime.
+
+## Path A: Docker-Only Simulation
+
+```bash
+cp .env.example .env
+rm -f data/tasks.db data/tasks.db-shm data/tasks.db-wal
+docker compose up --build
+```
+
+In a second terminal:
+
+```bash
+docker compose exec app npm run simulate:workflow
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+Expected result:
+
+- Two signed Superset issue webhooks are accepted from `your-org/superset`.
+- Two dry-run Devin sessions are created.
+- Polling completes them with fake PR URLs.
+- The dashboard shows completed tasks, lifecycle events, authorization reasons, suggested tests, and success metrics.
+
+The main simulation command sends signed `issues` webhook payloads to `/api/webhooks/github`. This validates the same HMAC-protected endpoint that GitHub uses in live mode.
+
+## Path B: Live Local Run Against Your Own Fork
+
+Use this path when you want to prove the same system against a real GitHub fork and live Devin sessions.
+
+1. Fork or copy `https://github.com/apache/superset`.
+2. Copy `.env.example` to `.env`.
+3. Set `GITHUB_OWNER`, `GITHUB_REPO`, `AUTHORIZED_GITHUB_LOGINS`, `DEVIN_API_KEY`, `DEVIN_ORG_ID`, `GITHUB_TOKEN`, `DEVIN_DRY_RUN=false`, and `GITHUB_DRY_RUN=false`.
+4. Start Docker:
+
+```bash
+docker compose up --build
+```
+
+5. Expose the local app:
+
+```bash
+ngrok http 3000
+```
+
+6. Set `APP_BASE_URL` to the HTTPS ngrok URL and restart Compose.
+7. In your Superset fork, create the `devin-remediate` label.
+8. Configure a GitHub webhook:
+   - Payload URL: `${APP_BASE_URL}/api/webhooks/github`
+   - Content type: `application/json`
+   - Secret: same value as `GITHUB_WEBHOOK_SECRET`
+   - Events: **Issues**
+9. Add `devin-remediate` to one of the selected issues.
+
+See [docs/live-github-setup.md](docs/live-github-setup.md) for the full checklist and troubleshooting.
+
+## Path C: Hosted Live Demo
+
+The hosted demo is intentionally not multi-tenant. It is a public, observable instance connected to the author's Superset fork and credentials so reviewers can inspect the live system without configuring their own fork.
+
+If a hosted URL is provided with the submission, open it directly and inspect:
+
+- Current task queue and status history.
+- Devin session and PR/blocker links.
+- Authorization decisions and trigger actors.
+- Aggregate success/blocked/failed metrics.
+
+For deployment instructions, see [docs/hosted-demo.md](docs/hosted-demo.md). The hosted mode uses `npm run start:hosted`, runs the Next app and poller in one container, stores SQLite on a persistent volume, protects the poller endpoint with `CRON_SECRET`, and disables `/api/simulate` with `SIMULATION_ENABLED=false`.
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in real values for a live run.
+Copy `.env.example` to `.env`. The checked-in defaults are safe for Path A and match the sample events.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DEVIN_API_KEY` | Live run | Devin service user API key. |
-| `DEVIN_ORG_ID` | Live run | Devin organization ID, for `/v3/organizations/{org_id}/sessions`. |
+| `DEVIN_API_KEY` | Live/hosted run | Devin service user API key. |
+| `DEVIN_ORG_ID` | Live/hosted run | Devin organization ID for `/v3/organizations/{org_id}/sessions`. |
+| `DEVIN_MAX_ACU_LIMIT` | Optional | Max ACU limit sent to Devin. |
 | `DEVIN_DRY_RUN` | Optional | Set `true` to simulate Devin create/poll calls locally. |
-| `GITHUB_TOKEN` | Live comments | Token with permission to comment on fork issues. |
-| `GITHUB_WEBHOOK_SECRET` | Webhook | Secret configured in the GitHub webhook. |
-| `GITHUB_OWNER` | Reference | Owner of the Superset fork. |
-| `GITHUB_REPO` | Reference | Superset fork repo name. |
-| `AUTHORIZED_GITHUB_LOGINS` | Optional | Comma-separated GitHub usernames allowed to trigger Devin. If unset, signed label events are trusted because labels require repo permissions. |
+| `GITHUB_TOKEN` | Live/hosted comments | Token with permission to comment on fork issues. |
+| `GITHUB_WEBHOOK_SECRET` | Webhook | Secret configured in the GitHub webhook and used by signed local simulation. |
+| `GITHUB_OWNER` | Auth | Owner of the Superset fork. Defaults to `your-org` for sample events. |
+| `GITHUB_REPO` | Auth | Superset fork repo name. Defaults to `superset` for sample events. |
+| `AUTHORIZED_GITHUB_LOGINS` | Optional | Comma-separated GitHub usernames allowed to trigger Devin. |
 | `GITHUB_DRY_RUN` | Optional | Set `true` to log comments instead of writing to GitHub. |
-| `APP_BASE_URL` | Yes | Public base URL used in GitHub comments. |
-| `CRON_SECRET` | Optional | Bearer token used by external pollers if you add auth around polling. The demo polling endpoint is open. |
-| `SQLITE_PATH` | Optional | Defaults to `./data/tasks.db`. |
+| `APP_BASE_URL` | Comments/demo | Base URL used in GitHub comments and simulation output. |
+| `ALLOWED_DEV_ORIGINS` | Optional | Comma-separated ngrok/public dev origins for `npm run dev`; not needed for Docker production mode. |
+| `CRON_SECRET` | Optional | If set, `/api/cron/poll-devin` requires `Authorization: Bearer <CRON_SECRET>`. |
+| `SIMULATION_ENABLED` | Optional | Defaults to enabled. Set `false` in hosted deployments to block `/api/simulate`. |
+| `SQLITE_PATH` | Optional | Defaults to `./data/tasks.db`; use `/data/tasks.db` for Railway volume hosting. |
 
-For a local no-credential demo, keep `DEVIN_DRY_RUN=true` and `GITHUB_DRY_RUN=true`.
+## Runtime Commands
+
+```bash
+npm install
+npm run dev
+```
+
+Runs the app locally without Docker.
+
+```bash
+docker compose up --build
+```
+
+Runs the local Docker setup with two containers:
+
+- `app`: Next app and API at `http://localhost:3000`.
+- `poller`: calls `POST /api/cron/poll-devin` every 10 seconds.
+
+```bash
+npm run start:hosted
+```
+
+Runs the hosted single-container mode: Next app plus poller in the same container so both share the same persistent SQLite volume.
+
+## Direct Development Helper
+
+`/api/simulate` is kept as a lightweight local helper. It skips GitHub HMAC verification, but uses the same parsed issue orchestration path after that point.
+
+```bash
+curl -X POST http://localhost:3000/api/simulate
+```
+
+If `CRON_SECRET` is set and you want to poll manually:
+
+```bash
+curl -X POST http://localhost:3000/api/cron/poll-devin \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Use `npm run simulate:workflow` for the stronger simulation path because it signs payloads and includes the poller bearer token automatically.
 
 ## Authorization Model
 
@@ -45,78 +167,10 @@ The automation does not let any public issue author spend Devin capacity.
 - Events must come from the configured `GITHUB_OWNER/GITHUB_REPO` fork.
 - The event must be an `issues` event that opens or labels an issue with `devin-remediate`.
 - If `AUTHORIZED_GITHUB_LOGINS` is set, the GitHub event sender must be in that allowlist.
-- If `AUTHORIZED_GITHUB_LOGINS` is unset, `labeled` events are accepted because GitHub only lets users with repository permissions apply labels.
+- If `AUTHORIZED_GITHUB_LOGINS` is unset, `labeled` events are accepted because labels require repository permissions.
 - `opened` events with the label already present are accepted only from trusted GitHub author associations: `OWNER`, `MEMBER`, or `COLLABORATOR`.
 - Unauthorized remediation triggers are recorded as rejected intake records on the dashboard, but they do not count as failed Devin tasks.
 - If a previously rejected issue is later labeled by an authorized maintainer, the existing record is promoted instead of creating a duplicate Devin session.
-
-## Task Statuses
-
-The dashboard uses maintainer-facing statuses:
-
-- `accepted`: trigger authorized and task persisted.
-- `session_created`: Devin session created.
-- `working`: Devin is active.
-- `completed`: PR or successful outcome available.
-- `blocked`: Devin needs human input or could not safely continue.
-- `failed`: automation or API error.
-- `rejected`: trigger was not authorized; excluded from throughput metrics.
-
-## Run Locally
-
-```bash
-npm install
-cp .env.example .env
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-## Run With Docker
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-The SQLite database is stored under `./data/tasks.db` via the compose volume.
-
-## Simulate An Issue Event
-
-The app ships with `sample-events/parse-cookie-opened.json`. Calling `/api/simulate` with no body uses that sample and reuses the same orchestration path as the real webhook.
-
-```bash
-curl -X POST http://localhost:3000/api/simulate
-```
-
-To simulate the second issue:
-
-```bash
-curl -X POST http://localhost:3000/api/simulate \
-  -H "Content-Type: application/json" \
-  --data @sample-events/get-owner-name-labeled.json
-```
-
-Then poll Devin:
-
-```bash
-curl -X POST http://localhost:3000/api/cron/poll-devin
-```
-
-In dry-run mode, polling immediately completes with a fake PR URL so the dashboard can show the full lifecycle.
-
-## Configure The GitHub Webhook
-
-1. Fork or copy `https://github.com/apache/superset` into your GitHub account or organization.
-2. Create the label `devin-remediate`.
-3. In the fork, go to **Settings → Webhooks → Add webhook**.
-4. Payload URL: `${APP_BASE_URL}/api/webhooks/github`.
-5. Content type: `application/json`.
-6. Secret: the same value as `GITHUB_WEBHOOK_SECRET`.
-7. Events: choose **Issues**.
-8. Create or label an issue with `devin-remediate`.
-
-For local webhook delivery, use a tunnel such as ngrok and set `APP_BASE_URL` to the public tunnel URL.
 
 ## Selected Superset Issues
 
@@ -148,33 +202,19 @@ cd superset-frontend && yarn test src/utils/getOwnerName.test.ts
 
 Each issue body should include the problem, target file, acceptance criteria, suggested test command, and an instruction to open a PR against the fork.
 
-## Dashboard Proof
-
-The dashboard at `/` shows:
-
-- GitHub issue, repository, and issue number.
-- Trigger actor, trigger action, authorization reason, and accepted/rejected decision.
-- Current remediation status, normalized status detail, and whether human review is required.
-- GitHub issue, Devin session, and PR links when available.
-- Suggested test command, tests run, structured summary, and blocker/error details.
-- A compact lifecycle per task: issue trigger, accepted/rejected, session created, status updated, PR/blocker/failure, and final comment.
-- Aggregate accepted-task metrics: active, completed, blocked, failed, success rate, and average duration.
-
-This makes the remediation lane legible to maintainers and engineering leads: every task is tied to a GitHub issue, every Devin session is tracked, every PR still goes through normal human review, and the dashboard exposes throughput, blockers, and reliability.
-
 ## API Routes
 
-- `POST /api/webhooks/github`: verified GitHub issue webhook receiver.
-- `POST /api/simulate`: local/demo trigger using a sample event or request JSON.
+- `POST /api/webhooks/github`: verified GitHub issue webhook receiver. Also accepts signed GitHub `ping` events.
+- `POST /api/simulate`: local demo helper; disabled when `SIMULATION_ENABLED=false`.
 - `GET /api/tasks`: task state.
 - `GET /api/metrics`: aggregate reporting.
-- `POST /api/cron/poll-devin`: protected poller for active Devin sessions.
+- `POST /api/cron/poll-devin`: poller endpoint for active Devin sessions; protected when `CRON_SECRET` is set.
 
 ## Loom Demo Flow
 
-1. Explain the safe remediation lane for selected Superset issues.
-2. Show a Superset fork issue labeled `devin-remediate`.
-3. Trigger the webhook or call `/api/simulate`.
-4. Show concise GitHub comments and the Devin session URL.
-5. Poll Devin and show the dashboard updating with PR, blocker, tests, and lifecycle state.
+1. Explain the three reproduction paths.
+2. Show the Docker-only simulation for reviewer reproducibility.
+3. Show a Superset fork issue labeled `devin-remediate`.
+4. Show concise GitHub comments, Devin session URL, and PR/blocker result.
+5. Show the dashboard updating with metrics, lifecycle state, and review handoff.
 6. Close with real-customer extensions: scanner ingestion, Jira/Linear intake, approval gates, and richer org-level metrics.

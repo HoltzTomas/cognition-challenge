@@ -10,6 +10,10 @@ export async function POST(req: Request) {
 
     await verifyGitHubWebhook(req.headers, rawBody);
 
+    if (req.headers.get("x-github-event") === "ping") {
+      return Response.json({ ok: true, event: "ping" });
+    }
+
     const event = parseGitHubWebhook(req.headers, rawBody);
     const result = await handleGitHubIssueEvent(event);
 

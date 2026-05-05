@@ -6,6 +6,7 @@ import {
   parseGitHubWebhook,
   verifyGitHubWebhook,
 } from "@/lib/webhook";
+import { POST as postGitHubWebhook } from "@/app/api/webhooks/github/route";
 
 const payload = {
   action: "labeled",
@@ -25,13 +26,13 @@ const payload = {
   sender: { login: "alice" },
 };
 
-function signedHeaders(rawBody: string, secret: string) {
+function signedHeaders(rawBody: string, secret: string, event = "issues") {
   const signature = `sha256=${crypto
     .createHmac("sha256", secret)
     .update(rawBody)
     .digest("hex")}`;
   return new Headers({
-    "x-github-event": "issues",
+    "x-github-event": event,
     "x-hub-signature-256": signature,
   });
 }
@@ -57,6 +58,21 @@ describe("webhook", () => {
     expect(event.repoFullName).toBe("acme/superset");
     expect(event.issueNumber).toBe(7);
     expect(isRemediationTrigger(event)).toBe(true);
+  });
+
+  test("accepts signed GitHub ping deliveries", async () => {
+    process.env.GITHUB_WEBHOOK_SECRET = "secret";
+    const rawBody = JSON.stringify({ zen: "Keep it logically awesome." });
+    const response = await postGitHubWebhook(
+      new Request("http://localhost/api/webhooks/github", {
+        method: "POST",
+        headers: signedHeaders(rawBody, "secret", "ping"),
+        body: rawBody,
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, event: "ping" });
   });
 
   test("accepts opened issues only when the label is already present", () => {
