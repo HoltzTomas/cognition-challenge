@@ -397,6 +397,22 @@ export function updateTask(id: number, patch: TaskUpdate) {
   return getTaskById(id);
 }
 
+export function claimFinalComment(taskId: number) {
+  const now = new Date().toISOString();
+  const result = getDb()
+    .prepare(
+      `
+      UPDATE tasks
+      SET final_comment_posted_at = ?, updated_at = ?
+      WHERE id = ?
+        AND final_comment_posted_at IS NULL
+    `,
+    )
+    .run(now, now, taskId);
+
+  return result.changes > 0 ? getTaskById(taskId) : null;
+}
+
 export function isTerminalStatus(status: string) {
   return ["completed", "failed", "blocked", "rejected"].includes(
     normalizeStoredStatus(status),

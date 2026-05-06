@@ -21,6 +21,8 @@ afterEach(async () => {
   delete process.env.DEVIN_DRY_RUN;
   delete process.env.GITHUB_DRY_RUN;
   delete process.env.CRON_SECRET;
+  delete process.env.DASHBOARD_DEVIN_REFRESH;
+  delete process.env.DASHBOARD_DEVIN_REFRESH_INTERVAL_MS;
   delete process.env.SIMULATION_ENABLED;
 });
 
@@ -60,5 +62,67 @@ describe("API route guards", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  test("refreshes active Devin sessions before returning dashboard tasks", async () => {
+    process.env.DASHBOARD_DEVIN_REFRESH_INTERVAL_MS = "0";
+    const { createTask, updateTask } = await import("@/lib/db");
+    const { GET } = await import("@/app/api/tasks/route");
+    const { task } = createTask({
+      repoFullName: "example/superset",
+      repoUrl: "https://github.com/example/superset",
+      issueNumber: 10,
+      issueTitle: "Issue",
+      issueBody: "Body",
+      issueUrl: "https://github.com/example/superset/issues/10",
+      rawEvent: {},
+    });
+
+    updateTask(task.id, {
+      devinSessionId: "devin-dry-run-example",
+      devinSessionUrl: "https://app.devin.ai/sessions/devin-dry-run-example",
+      status: "session_created",
+    });
+
+    const response = await GET();
+    const payload = (await response.json()) as {
+      tasks: Array<{ status: string; statusDetail: string | null; prUrl: string | null }>;
+    };
+
+    expect(payload.tasks[0]).toMatchObject({
+      status: "completed",
+      statusDetail: "pr_opened",
+      prUrl: "https://github.com/example/superset/pull/1",
+    });
+  });
+
+  test("refreshes active Devin sessions before returning dashboard metrics", async () => {
+    process.env.DASHBOARD_DEVIN_REFRESH_INTERVAL_MS = "0";
+    const { createTask, updateTask } = await import("@/lib/db");
+    const { GET } = await import("@/app/api/metrics/route");
+    const { task } = createTask({
+      repoFullName: "example/superset",
+      repoUrl: "https://github.com/example/superset",
+      issueNumber: 11,
+      issueTitle: "Issue",
+      issueBody: "Body",
+      issueUrl: "https://github.com/example/superset/issues/11",
+      rawEvent: {},
+    });
+
+    updateTask(task.id, {
+      devinSessionId: "devin-dry-run-example",
+      devinSessionUrl: "https://app.devin.ai/sessions/devin-dry-run-example",
+      status: "session_created",
+    });
+
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(payload).toMatchObject({
+      active: 0,
+      completed: 1,
+      total: 1,
+    });
   });
 });

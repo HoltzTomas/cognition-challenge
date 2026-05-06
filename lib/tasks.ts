@@ -3,6 +3,7 @@ import path from "node:path";
 import { createDevinSession, getDevinSession } from "@/lib/devin/client";
 import {
   createTask,
+  claimFinalComment,
   getTaskById,
   listActiveTasks,
   updateTask,
@@ -302,10 +303,13 @@ export async function pollActiveDevinSessions() {
       })!;
 
       if (isTerminal(status) && !updatedTask.finalCommentPostedAt) {
-        await safeComment(updatedTask, finalComment(updatedTask));
-        results.push(
-          updateTask(updatedTask.id, { finalCommentPostedAt: nowIso() }),
-        );
+        const claimedTask = claimFinalComment(updatedTask.id);
+        if (claimedTask) {
+          await safeComment(claimedTask, finalComment(claimedTask));
+          results.push(claimedTask);
+        } else {
+          results.push(getTaskById(updatedTask.id));
+        }
       } else {
         results.push(updatedTask);
       }
