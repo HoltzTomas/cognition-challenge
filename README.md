@@ -173,36 +173,6 @@ The automation does not let any public issue author spend Devin capacity.
 - Unauthorized remediation triggers are recorded as rejected intake records on the dashboard, but they do not count as failed Devin tasks.
 - If a previously rejected issue is later labeled by an authorized maintainer, the existing record is promoted instead of creating a duplicate Devin session.
 
-## Selected Superset Issues
-
-These are intentionally deterministic and bounded for a 2-3 hour take-home:
-
-### 1. `parseCookie` compact cookie parsing
-
-Target: `superset-frontend/src/utils/parseCookie.ts`
-
-Problem: compact cookies like `a=1;b=2` and values like `token=a=b=c` are mishandled because the utility splits on `"; "` and then splits every `"="`.
-
-Suggested test:
-
-```bash
-cd superset-frontend && yarn test src/utils/parseCookie.test.ts
-```
-
-### 2. `getOwnerName` partial owner records
-
-Target: `superset-frontend/src/utils/getOwnerName.ts`
-
-Problem: optional owner fields can render strings like `Ada undefined` or `undefined Lovelace`.
-
-Suggested test:
-
-```bash
-cd superset-frontend && yarn test src/utils/getOwnerName.test.ts
-```
-
-Each issue body should include the problem, target file, acceptance criteria, suggested test command, and an instruction to open a PR against the fork.
-
 ## API Routes
 
 - `POST /api/webhooks/github`: verified GitHub issue webhook receiver. Also accepts signed GitHub `ping` events.
