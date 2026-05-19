@@ -1,39 +1,27 @@
-import { DashboardClient } from "@/app/dashboard-client";
-import { listTasks } from "@/lib/db";
-import { getMetrics } from "@/lib/metrics";
+import { getTweet } from "react-tweet/api";
+import type { Tweet as TweetData } from "react-tweet/api";
+import { PresentationClient } from "@/app/presentation-client";
+import type { PresentationTweets } from "@/app/presentation-client";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+const tweetIds = {
+  accountCreationBug: "1551634302265446401",
+  beloLeaving: "1641873478675488783",
+  rauchTimeToConfetti: "1329079593915928580",
+} satisfies Record<keyof PresentationTweets, string>;
 
-export default function DashboardPage() {
-  const tasks = listTasks();
-  const metrics = getMetrics();
-  const config = {
-    appBaseUrl: process.env.APP_BASE_URL || "http://localhost:3000",
-    simulationEnabled: process.env.SIMULATION_ENABLED !== "false",
-  };
+async function loadTweet(id: string): Promise<TweetData | undefined> {
+  try {
+    return await getTweet(id, { cache: "force-cache" });
+  } catch (error) {
+    console.error(`Unable to load tweet ${id}`, error);
+    return undefined;
+  }
+}
 
-  return (
-    <main className="dashboardShell">
-      <header className="pageHeader">
-        <div className="titleCluster">
-          <p className="eyebrow">Maintainer Operations</p>
-          <div className="titleRow">
-            <h1>Superset Remediation Lane</h1>
-            <span className="livePill">Live lane</span>
-          </div>
-          <p className="pageDeck">
-            Controlled Devin sessions for selected Superset issues, review gates,
-            and maintainer handoffs.
-          </p>
-        </div>
-      </header>
-
-      <DashboardClient
-        initialConfig={config}
-        initialMetrics={metrics}
-        initialTasks={tasks}
-      />
-    </main>
+export default async function HomePage() {
+  const entries = await Promise.all(
+    Object.entries(tweetIds).map(async ([key, id]) => [key, await loadTweet(id)]),
   );
+
+  return <PresentationClient tweets={Object.fromEntries(entries)} />;
 }
