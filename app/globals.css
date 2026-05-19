@@ -442,8 +442,10 @@ p {
 
 .heroMetricStrip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 460px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  margin-inline: auto;
 }
 
 .heroMetric {
@@ -1012,6 +1014,7 @@ p {
   }
 
   .heroMetricStrip {
+    width: min(100%, 300px);
     grid-template-columns: 1fr;
   }
 

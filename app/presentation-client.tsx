@@ -72,7 +72,7 @@ const slides: Slide[] = [
     section: "Opening",
     title: "Building Belo's mobile app",
     thesis:
-      "I joined at 18 as the second engineer and helped take Belo from a blank page to around 1M registered users.",
+      "I joined at 18 as the second engineer and helped take Belo from a blank page to +1M registered users.",
     bullets: [
       "Only frontend/mobile engineer in the early team",
       "Owned onboarding, UX, architecture, releases, and incidents",
@@ -80,8 +80,7 @@ const slides: Slide[] = [
     ],
     metrics: [
       { value: "2nd", label: "engineer" },
-      { value: "1M", label: "registered users" },
-      { value: "65%", label: "onboarding churn reduction" },
+      { value: "+1M", label: "registered users" },
     ],
     heroImages: [
       {
